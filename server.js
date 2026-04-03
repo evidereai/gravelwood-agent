@@ -58,7 +58,7 @@ app.post('/api/init', async (req, res) => {
 
         // Step 1: Use Claude + web search to find the exact car on gravelwood.co.uk
         const searchRes = await callClaude({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 3000,
             tools: [{ type: 'web_search_20250305', name: 'web_search' }],
             system: `You are a research assistant for a car dealership. 
@@ -91,7 +91,7 @@ If no match is found, summarise what is available on gravelwood.co.uk.`,
 
         // Step 2: Extract a short display name for the UI badge
         const nameRes = await callClaude({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 30,
             system: 'Return ONLY the year, make and model of the car. E.g. "2024 Land Rover Range Rover". No other text.',
             messages: [{ role: 'user', content: carContext }]
@@ -100,7 +100,7 @@ If no match is found, summarise what is available on gravelwood.co.uk.`,
 
         // Step 3: Generate the opening greeting for the call
         const greetRes = await callClaude({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 200,
             system: buildSystemPrompt(carContext),
             messages: [{
@@ -128,7 +128,7 @@ app.post('/api/chat', async (req, res) => {
 
     try {
         const chatRes = await callClaude({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 400,
             system: buildSystemPrompt(carContext, customerName),
             messages
@@ -155,7 +155,7 @@ app.post('/api/summary', async (req, res) => {
 
     try {
         const sumRes = await callClaude({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 700,
             system: 'You write concise, professional post-call lead summaries for a prestige car dealership sales team. Be direct and actionable.',
             messages: [{
