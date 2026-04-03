@@ -8,8 +8,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// ─── Claude API Helper ────────────────────────────────────────────────────────
-
 function callClaude(payload) {
     return new Promise((resolve, reject) => {
         const body = JSON.stringify(payload);
@@ -27,8 +25,14 @@ function callClaude(payload) {
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', () => {
-                try { resolve(JSON.parse(data)); }
-                catch (e) { reject(new Error('Claude parse error: ' + data.substring(0, 200))); }
+                try {
+                    const parsed = JSON.parse(data);
+                    console.log('Claude response type:', parsed.type, '| stop_reason:', parsed.stop_reason);
+                    if (parsed.error) console.error('Claude API error:', JSON.stringify(parsed.error));
+                    resolve(parsed);
+                } catch (e) {
+                    reject(new Error('Claude parse error: ' + data.substring(0, 300)));
+                }
             });
         });
         req.on('error', reject);
@@ -38,49 +42,41 @@ function callClaude(payload) {
 }
 
 function extractText(content) {
-    if (!Array.isArray(content)) return '';
-    return content
-        .filter(b => b.type === 'text')
-        .map(b => b.text)
-        .join('');
+    if (!Array.isArray(content)) {
+        console.error('extractText: content is not an array:', typeof content, content);
+        return '';
+    }
+    const texts = [];
+    for (const block of content) {
+        if (block.type === 'text' && block.text) {
+            texts.push(block.text);
+        } else if (block.type === 'tool_result' && Array.isArray(block.content)) {
+            for (const inner of block.content) {
+                if (inner.type === 'text' && inner.text) texts.push(inner.text);
+            }
+        }
+    }
+    const result = texts.join('');
+    if (!result) console.warn('extractText: no text found in content blocks:', JSON.stringify(content).substring(0, 300));
+    return result;
 }
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
-
-// POST /api/init
-// Takes customer name + enquiry, searches Gravelwood for the car,
-// returns car context + opening message for the call
 app.post('/api/init', async (req, res) => {
     const { name, enquiry } = req.body;
     if (!name || !enquiry) return res.status(400).json({ error: 'Name and enquiry required' });
+    console.log(`Init call: ${name} — "${enquiry}"`);
 
     try {
-
-        // Step 1: Use Claude + web search to find the exact car on gravelwood.co.uk
         const searchRes = await callClaude({
             model: 'claude-sonnet-4-6',
             max_tokens: 3000,
             tools: [{ type: 'web_search_20250305', name: 'web_search' }],
             system: `You are a research assistant for a car dealership. 
-Your job is to search gravelwood.co.uk and find the specific vehicle a customer is enquiring about.
-Search thoroughly and extract ALL available details about the vehicle.
-Return a detailed, structured plain-text summary covering:
-- Full vehicle name (year, make, model, trim)
-- Price
-- Mileage
-- Colour (exterior and interior)
-- Engine size, type and output (BHP)
-- Transmission
-- 0-62mph and top speed
-- Fuel economy
-- All standard features and equipment
-- Any extras/options fitted and their prices
-- Stock reference number
-- Any other relevant details
-- The URL of the listing
-
-If the customer's enquiry is vague, find the closest match on the site.
-If no match is found, summarise what is available on gravelwood.co.uk.`,
+Search gravelwood.co.uk and find the specific vehicle a customer is enquiring about.
+Extract ALL available details: full name, year, price, mileage, colour, engine, BHP, transmission, 0-62, MPG, features, extras with prices, stock ref, URL.
+Return a detailed plain-text summary of everything you find.
+If the enquiry is vague, find the closest match on the site.
+If no match found, summarise what is available on gravelwood.co.uk.`,
             messages: [{
                 role: 'user',
                 content: `Customer enquiry: "${enquiry}"\n\nSearch gravelwood.co.uk for this vehicle and return a comprehensive summary of all its details.`
@@ -88,17 +84,17 @@ If no match is found, summarise what is available on gravelwood.co.uk.`,
         });
 
         const carContext = extractText(searchRes.content);
+        console.log('Car context length:', carContext.length);
 
-        // Step 2: Extract a short display name for the UI badge
         const nameRes = await callClaude({
             model: 'claude-sonnet-4-6',
             max_tokens: 30,
             system: 'Return ONLY the year, make and model of the car. E.g. "2024 Land Rover Range Rover". No other text.',
-            messages: [{ role: 'user', content: carContext }]
+            messages: [{ role: 'user', content: carContext || 'Unknown vehicle' }]
         });
         const carName = extractText(nameRes.content).trim();
+        console.log('Car name:', carName);
 
-        // Step 3: Generate the opening greeting for the call
         const greetRes = await callClaude({
             model: 'claude-sonnet-4-6',
             max_tokens: 200,
@@ -110,18 +106,16 @@ If no match is found, summarise what is available on gravelwood.co.uk.`,
         });
 
         const openingMessage = extractText(greetRes.content);
+        console.log('Opening message length:', openingMessage.length);
 
         res.json({ carContext, carName, openingMessage });
 
     } catch (err) {
         console.error('Init error:', err.message);
-        res.status(500).json({ error: 'Failed to initialise call. ' + err.message });
+        res.status(500).json({ error: 'Failed to initialise call: ' + err.message });
     }
 });
 
-
-// POST /api/chat
-// Continues the conversation — takes full message history + car context
 app.post('/api/chat', async (req, res) => {
     const { messages, carContext, customerName } = req.body;
     if (!messages || !carContext) return res.status(400).json({ error: 'Missing required fields' });
@@ -135,8 +129,8 @@ app.post('/api/chat', async (req, res) => {
         });
 
         const reply = extractText(chatRes.content);
+        console.log('Chat reply length:', reply.length);
 
-        // Flag questions the agent couldn't fully answer for the summary
         const flagged = /don't have that detail|make a note|follow.?up|not sure about that|sales team will|contact.*team/i.test(reply);
 
         res.json({ reply, flagged });
@@ -147,9 +141,6 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-
-// POST /api/summary
-// Generates a structured lead summary at end of call
 app.post('/api/summary', async (req, res) => {
     const { transcript, customerName, enquiry, flaggedQuestions, carName } = req.body;
 
@@ -187,14 +178,11 @@ RECOMMENDED NEXT ACTION: one clear sentence`
     }
 });
 
-
-// ─── System Prompt ────────────────────────────────────────────────────────────
-
 function buildSystemPrompt(carContext, customerName) {
     return `You are a professional AI sales agent for Gravelwood Car Sales — a prestige used car dealership near Brands Hatch in Kent, UK.
 
 DEALERSHIP:
-- Address: Unit 4a, West Yoke Farm, Michaels Lane, Sevenoaks, Kent, TN15 7EP  
+- Address: Unit 4a, West Yoke Farm, Michaels Lane, Sevenoaks, Kent, TN15 7EP
 - Phone: 01474 874 873
 - Hours: By appointment only, Monday to Saturday
 - Nationwide delivery available
@@ -214,11 +202,8 @@ YOUR RULES:
 8. Never fabricate information — trust is everything in prestige car sales`;
 }
 
-
-// ─── Start ────────────────────────────────────────────────────────────────────
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✓ Gravelwood AI Agent running on port ${PORT}`);
-    if (!ANTHROPIC_API_KEY) console.warn('⚠ ANTHROPIC_API_KEY not set in environment variables');
+    if (!ANTHROPIC_API_KEY) console.warn('⚠ WARNING: ANTHROPIC_API_KEY is not set');
 });
