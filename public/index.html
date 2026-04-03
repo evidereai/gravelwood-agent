@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravelwood Car Sales — AI Sales Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:        #07090F;
+            --bg-card:   #0C1018;
+            --bg-raised: #131A26;
+            --bg-input:  #090C13;
+            --gold:      #C4954A;
+            --gold-lt:   #DDB872;
+            --gold-dim:  rgba(196,149,74,0.12);
+            --gold-bdr:  rgba(196,149,74,0.22);
+            --text:      #EDE9E0;
+            --text-2:    #7A7670;
+            --text-3:    #3A3835;
+            --green:     #4A9E6E;
+            --green-bg:  rgba(74,158,110,0.1);
+            --green-bdr: rgba(74,158,110,0.25);
+            --red:       #C04040;
+            --red-bg:    rgba(192,64,64,0.1);
+            --red-bdr:   rgba(192,64,64,0.25);
+            --bdr:       rgba(255,255,255,0.055);
+            --bdr-2:     rgba(255,255,255,0.1);
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Layout ─────────────────────────────────── */
+        .app {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            padding: 20px 40px;
+            border-bottom: 1px solid var(--bdr);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 19px;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            color: var(--text);
+        }
+        .logo em { font-style: normal; color: var(--gold); }
+
+        .header-pill {
+            font-size: 10px;
+            letter-spacing: 0.13em;
+            text-transform: uppercase;
+            color: var(--text-2);
+            border: 1px solid var(--bdr);
+            padding: 5px 13px;
+            border-radius: 99px;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .stage {
+            width: 100%;
+            max-width: 480px;
+        }
+
+        /* ── Screens ─────────────────────────────────── */
+        .screen { display: none; }
+        .screen.active { display: block; }
+
+        /* ── Typography ──────────────────────────────── */
+        h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 38px;
+            font-weight: 400;
+            line-height: 1.15;
+            margin-bottom: 12px;
+        }
+
+        .lead {
+            font-size: 14px;
+            color: var(--text-2);
+            line-height: 1.65;
+            margin-bottom: 32px;
+        }
+
+        /* ── Form ────────────────────────────────────── */
+        .field { margin-bottom: 18px; }
+
+        .field label {
+            display: block;
+            font-size: 10px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-2);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .field input,
+        .field textarea {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--bdr);
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            padding: 13px 16px;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.2s;
+            appearance: none;
+        }
+
+        .field input::placeholder,
+        .field textarea::placeholder { color: var(--text-3); }
+
+        .field input:focus,
+        .field textarea:focus { border-color: var(--gold-bdr); }
+
+        .field textarea {
+            resize: vertical;
+            min-height: 88px;
+            line-height: 1.55;
+        }
+
+        /* ── Buttons ─────────────────────────────────── */
+        button {
+            display: block;
+            width: 100%;
+            padding: 13px 20px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.18s;
+            border: none;
+            text-align: center;
+        }
+
+        .btn-gold {
+            background: var(--gold);
+            color: #07090F;
+            margin-bottom: 10px;
+        }
+        .btn-gold:hover { background: var(--gold-lt); }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--bdr-2);
+            color: var(--text-2);
+        }
+        .btn-ghost:hover { border-color: var(--bdr-2); color: var(--text); background: rgba(255,255,255,0.03); }
+
+        .btn-green {
+            background: var(--green-bg);
+            border: 1px solid var(--green-bdr);
+            color: var(--green);
+        }
+        .btn-green:hover { background: rgba(74,158,110,0.18); }
+
+        .btn-red {
+            background: var(--red-bg);
+            border: 1px solid var(--red-bdr);
+            color: var(--red);
+        }
+        .btn-red:hover { background: rgba(192,64,64,0.18); }
+
+        /* ── Loading screen ──────────────────────────── */
+        .loader-wrap {
+            text-align: center;
+            padding: 48px 0;
+        }
+
+        .spinner {
+            width: 44px;
+            height: 44px;
+            border: 1px solid var(--bdr-2);
+            border-top-color: var(--gold);
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin: 0 auto 24px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loader-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 22px;
+            font-weight: 400;
+            margin-bottom: 8px;
+        }
+
+        .loader-step {
+            font-size: 12px;
+            color: var(--text-2);
+            letter-spacing: 0.04em;
+        }
+
+        /* ── Call card ───────────────────────────────── */
+        .call-card {
+            background: var(--bg-card);
+            border: 1px solid var(--bdr);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .call-top {
+            padding: 28px 24px 20px;
+            text-align: center;
+            border-bottom: 1px solid var(--bdr);
+        }
+
+        /* Avatar with ring animation for incoming */
+        .avatar-ring-wrap {
+            position: relative;
+            width: 68px;
+            margin: 0 auto 16px;
+        }
+
+        .avatar {
+            width: 68px;
+            height: 68px;
+            border-radius: 50%;
+            border: 1px solid var(--gold-bdr);
+            background: var(--gold-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+        }
+
+        .ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 1px solid var(--gold);
+            animation: ring-pulse 2s ease-out infinite;
+            opacity: 0;
+        }
+        .ring:nth-child(2) { animation-delay: 0.6s; }
+        .ring:nth-child(3) { animation-delay: 1.2s; }
+        @keyframes ring-pulse {
+            0%   { transform: scale(1);   opacity: 0.55; }
+            100% { transform: scale(2.4); opacity: 0; }
+        }
+
+        .call-name {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 21px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .call-sub {
+            font-size: 11px;
+            letter-spacing: 0.06em;
+            color: var(--text-2);
+        }
+
+        /* Connected status */
+        .call-live {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            font-size: 11px;
+            letter-spacing: 0.06em;
+            color: var(--green);
+            padding: 8px 0 2px;
+        }
+
+        .live-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: blink 1.6s infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+        /* Waveform */
+        .waveform {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            height: 28px;
+            margin: 4px 0 0;
+        }
+        .wbar {
+            width: 3px;
+            height: 4px;
+            background: var(--gold);
+            border-radius: 2px;
+            transition: height 0.08s;
+        }
+        .wbar.go { animation: wv 0.7s ease-in-out infinite; }
+        .wbar:nth-child(2).go { animation-delay: 0.1s; }
+        .wbar:nth-child(3).go { animation-delay: 0.2s; }
+        .wbar:nth-child(4).go { animation-delay: 0.3s; }
+        .wbar:nth-child(5).go { animation-delay: 0.15s; }
+        .wbar:nth-child(6).go { animation-delay: 0.05s; }
+        .wbar:nth-child(7).go { animation-delay: 0.25s; }
+        @keyframes wv { 0%,100%{height:4px} 50%{height:18px} }
+
+        /* Transcript */
+        .transcript {
+            padding: 14px;
+            min-height: 160px;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .transcript::-webkit-scrollbar { width: 3px; }
+        .transcript::-webkit-scrollbar-thumb { background: var(--bdr-2); border-radius: 2px; }
+
+        .msg { margin-bottom: 12px; }
+
+        .msg-label {
+            font-size: 9px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-3);
+            margin-bottom: 4px;
+        }
+
+        .msg-bubble {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            line-height: 1.55;
+            max-width: 88%;
+        }
+
+        .msg-agent .msg-bubble {
+            background: var(--bg-raised);
+            color: var(--text);
+            border: 1px solid var(--bdr);
+        }
+
+        .msg-user { text-align: right; }
+        .msg-user .msg-bubble {
+            background: var(--gold-dim);
+            color: var(--gold-lt);
+            border: 1px solid var(--gold-bdr);
+        }
+
+        /* Thinking indicator */
+        .thinking {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+            background: var(--bg-raised);
+            border: 1px solid var(--bdr);
+            padding: 10px 14px;
+            border-radius: 10px;
+        }
+        .tdot {
+            width: 4px; height: 4px;
+            border-radius: 50%;
+            background: var(--text-2);
+            animation: tdot 1.1s infinite;
+        }
+        .tdot:nth-child(2) { animation-delay: 0.18s; }
+        .tdot:nth-child(3) { animation-delay: 0.36s; }
+        @keyframes tdot {
+            0%,100%{ opacity:0.25; transform:translateY(0); }
+            50%    { opacity:1;    transform:translateY(-3px); }
+        }
+
+        /* Controls bar */
+        .controls {
+            border-top: 1px solid var(--bdr);
+            padding: 14px;
+            display: flex;
+            gap: 9px;
+        }
+        .controls button { margin: 0; }
+        .btn-mic { flex: 2; }
+        .btn-end { flex: 1; }
+
+        .btn-mic.on {
+            background: var(--green-bg);
+            border: 1px solid var(--green-bdr);
+            color: var(--green);
+        }
+
+        /* Text input row */
+        .text-row {
+            padding: 0 14px 14px;
+            display: flex;
+            gap: 8px;
+        }
+        .text-row input {
+            flex: 1;
+            background: var(--bg-input);
+            border: 1px solid var(--bdr);
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            padding: 9px 13px;
+            border-radius: 7px;
+            outline: none;
+        }
+        .text-row input:focus { border-color: var(--gold-bdr); }
+        .text-row input::placeholder { color: var(--text-3); }
+        .text-row button { flex: 0 0 auto; width: auto; padding: 9px 15px; font-size: 13px; margin: 0; }
+
+        /* Incoming call buttons */
+        .answer-btns {
+            display: flex;
+            gap: 10px;
+            padding: 18px 20px;
+        }
+        .answer-btns button { flex: 1; margin: 0; }
+
+        /* Car found notice */
+        .car-badge {
+            margin-top: 14px;
+            padding: 9px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            background: var(--green-bg);
+            border: 1px solid var(--green-bdr);
+            color: var(--green);
+            display: none;
+        }
+        .car-badge.show { display: block; }
+
+        /* Divider */
+        hr { border: none; border-top: 1px solid var(--bdr); margin: 24px 0; }
+
+        /* Summary */
+        .badge {
+            display: inline-block;
+            font-size: 9px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--gold);
+            border: 1px solid var(--gold-bdr);
+            padding: 4px 11px;
+            border-radius: 99px;
+            margin-bottom: 16px;
+        }
+
+        .summary-box {
+            background: var(--bg-card);
+            border: 1px solid var(--bdr);
+            border-radius: 12px;
+            padding: 18px;
+            font-size: 13px;
+            line-height: 1.8;
+            color: var(--text-2);
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+        }
+
+        .note {
+            font-size: 11px;
+            color: var(--text-3);
+            text-align: center;
+            margin-top: 10px;
+            letter-spacing: 0.03em;
+        }
+
+        /* ── Mobile ──────────────────────────────────── */
+        @media (max-width: 500px) {
+            header { padding: 16px 20px; }
+            h1 { font-size: 30px; }
+            .controls { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+
+    <header>
+        <div class="logo">Gravelwood<em>.</em></div>
+        <div class="header-pill">AI Sales Agent</div>
+    </header>
+
+    <main>
+        <div class="stage">
+
+            <!-- ── Screen 1: Enquiry Form ──────────────── -->
+            <div id="s-form" class="screen active">
+                <h1>Vehicle<br>Enquiry</h1>
+                <p class="lead">Tell us which car you're interested in and our AI sales agent will call you right back.</p>
+
+                <div class="field">
+                    <label>Your Name</label>
+                    <input id="inp-name" type="text" placeholder="e.g. James Cooper" autocomplete="name" />
+                </div>
+
+                <div class="field">
+                    <label>Which car are you interested in?</label>
+                    <textarea id="inp-enquiry" placeholder="e.g. I'm interested in the Range Rover you have listed..."></textarea>
+                </div>
+
+                <button class="btn-gold" onclick="submitEnquiry()">Submit Enquiry</button>
+            </div>
+
+
+            <!-- ── Screen 2: Loading ────────────────────── -->
+            <div id="s-loading" class="screen">
+                <div class="loader-wrap">
+                    <div class="spinner"></div>
+                    <div class="loader-title" id="load-title">Reviewing your enquiry</div>
+                    <div class="loader-step" id="load-step">Searching Gravelwood inventory...</div>
+                </div>
+            </div>
+
+
+            <!-- ── Screen 3: Incoming Call ──────────────── -->
+            <div id="s-incoming" class="screen">
+                <div class="call-card">
+                    <div class="call-top">
+                        <div class="avatar-ring-wrap">
+                            <div class="ring"></div>
+                            <div class="ring"></div>
+                            <div class="ring"></div>
+                            <div class="avatar">🚗</div>
+                        </div>
+                        <div class="call-name">Gravelwood Agent</div>
+                        <div class="call-sub">Incoming call &middot; AI Sales</div>
+                    </div>
+                    <div class="answer-btns">
+                        <button class="btn-red" onclick="show('s-form')">Decline</button>
+                        <button class="btn-green" onclick="answerCall()">Answer</button>
+                    </div>
+                </div>
+                <div id="car-badge" class="car-badge">
+                    ✓ &nbsp;<span id="car-badge-text">Car found in inventory</span>
+                </div>
+            </div>
+
+
+            <!-- ── Screen 4: Active Call ────────────────── -->
+            <div id="s-call" class="screen">
+                <div class="call-card">
+                    <div class="call-top">
+                        <div class="avatar">🚗</div>
+                        <div class="call-name" style="margin-top:14px">Gravelwood Agent</div>
+                        <div class="call-live">
+                            <div class="live-dot"></div>
+                            <span id="call-status">Connected</span>
+                        </div>
+                        <div class="waveform" id="waveform">
+                            <div class="wbar"></div>
+                            <div class="wbar"></div>
+                            <div class="wbar"></div>
+                            <div class="wbar"></div>
+                            <div class="wbar"></div>
+                            <div class="wbar"></div>
+                            <div class="wbar"></div>
+                        </div>
+                    </div>
+
+                    <div class="transcript" id="transcript"></div>
+
+                    <div class="controls">
+                        <button id="mic-btn" class="btn-ghost btn-mic" onclick="toggleMic()">🎤 Tap to Speak</button>
+                        <button class="btn-red btn-end" onclick="endCall()">End Call</button>
+                    </div>
+
+                    <div class="text-row">
+                        <input type="text" id="text-inp" placeholder="Or type your question..."
+                               onkeydown="if(event.key==='Enter')sendText()" />
+                        <button class="btn-ghost" onclick="sendText()">Send</button>
+                    </div>
+                </div>
+                <p class="note" id="voice-note">Voice and text both supported</p>
+            </div>
+
+
+            <!-- ── Screen 5: Summary ────────────────────── -->
+            <div id="s-summary" class="screen">
+                <div class="badge">Call Complete</div>
+                <h1>Call<br>Summary</h1>
+                <p class="lead">Prepared for the Gravelwood sales team.</p>
+                <div class="summary-box" id="summary-content">Generating summary...</div>
+                <button class="btn-gold" onclick="resetAll()">New Enquiry</button>
+                <button class="btn-ghost" onclick="window.print()" style="margin-top:10px">Print / Save</button>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<script>
+    // ── State ──────────────────────────────────────────────────────────────────
+    let S = {
+        name: '', enquiry: '', carContext: '', carName: '',
+        openingMessage: '', messages: [], flagged: [],
+        listening: false, speaking: false
+    };
+
+    let recognition = null;
+    const canSpeak  = 'speechSynthesis' in window;
+    const canListen = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+
+    // ── Utils ──────────────────────────────────────────────────────────────────
+    function show(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    function setLoad(title, step) {
+        document.getElementById('load-title').textContent = title;
+        document.getElementById('load-step').textContent  = step;
+    }
+
+    function setStatus(text) {
+        document.getElementById('call-status').textContent = text;
+    }
+
+    // ── Screen 1 → 2: Submit enquiry ──────────────────────────────────────────
+    async function submitEnquiry() {
+        S.name    = document.getElementById('inp-name').value.trim();
+        S.enquiry = document.getElementById('inp-enquiry').value.trim();
+
+        if (!S.name)    { alert('Please enter your name'); return; }
+        if (!S.enquiry) { alert('Please describe the car you are interested in'); return; }
+
+        show('s-loading');
+        setLoad('Reviewing your enquiry', 'Searching Gravelwood inventory...');
+
+        try {
+            const res = await fetch('/api/init', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: S.name, enquiry: S.enquiry })
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || 'Server error');
+            }
+
+            const data = await res.json();
+            S.carContext      = data.carContext;
+            S.carName         = data.carName || 'Vehicle';
+            S.openingMessage  = data.openingMessage;
+
+            setLoad('Agent ready', 'Connecting your call...');
+
+            setTimeout(() => {
+                const badge = document.getElementById('car-badge');
+                document.getElementById('car-badge-text').textContent = `${S.carName} found in inventory`;
+                badge.classList.add('show');
+                show('s-incoming');
+            }, 600);
+
+        } catch (err) {
+            console.error(err);
+            alert('Could not connect: ' + err.message);
+            show('s-form');
+        }
+    }
+
+    // ── Screen 3 → 4: Answer call ─────────────────────────────────────────────
+    function answerCall() {
+        S.messages = [];
+        document.getElementById('transcript').innerHTML = '';
+        initSpeech();
+        show('s-call');
+
+        S.messages.push({ role: 'assistant', content: S.openingMessage });
+        addMsg('agent', S.openingMessage);
+        speak(S.openingMessage);
+    }
+
+    // ── Speech setup ───────────────────────────────────────────────────────────
+    function initSpeech() {
+        const note = document.getElementById('voice-note');
+
+        if (!canListen) {
+            document.getElementById('mic-btn').style.display = 'none';
+            note.textContent = 'Voice input not available in this browser — use text input below';
+            return;
+        }
+
+        const SR   = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SR();
+        recognition.lang           = 'en-GB';
+        recognition.continuous     = false;
+        recognition.interimResults = false;
+
+        recognition.onresult = e => handleInput(e.results[0][0].transcript);
+        recognition.onend    = () => { S.listening = false; updateMic(); };
+        recognition.onerror  = () => {
+            S.listening = false;
+            updateMic();
+            note.textContent = 'Microphone issue — please use text input below';
+        };
+
+        note.textContent = 'Tap the mic to speak, or type below';
+    }
+
+    function toggleMic() {
+        if (S.speaking || !recognition) return;
+        if (S.listening) { recognition.stop(); S.listening = false; }
+        else             { recognition.start(); S.listening = true; }
+        updateMic();
+    }
+
+    function updateMic() {
+        const btn = document.getElementById('mic-btn');
+        if (S.listening) {
+            btn.textContent = '🔴 Listening...';
+            btn.classList.add('on');
+        } else {
+            btn.textContent = '🎤 Tap to Speak';
+            btn.classList.remove('on');
+        }
+    }
+
+    // ── Text input ─────────────────────────────────────────────────────────────
+    function sendText() {
+        const inp = document.getElementById('text-inp');
+        const txt = inp.value.trim();
+        if (!txt) return;
+        inp.value = '';
+        handleInput(txt);
+    }
+
+    // ── Handle user input → Claude → speak ────────────────────────────────────
+    async function handleInput(text) {
+        if (S.speaking) window.speechSynthesis.cancel();
+
+        addMsg('user', text);
+        S.messages.push({ role: 'user', content: text });
+        setStatus('Thinking...');
+        addThinking();
+
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: S.messages,
+                    carContext: S.carContext,
+                    customerName: S.name
+                })
+            });
+
+            const data = await res.json();
+            removeThinking();
+
+            S.messages.push({ role: 'assistant', content: data.reply });
+            addMsg('agent', data.reply);
+            setStatus('Connected');
+
+            if (data.flagged) S.flagged.push(text);
+            speak(data.reply);
+
+        } catch (err) {
+            removeThinking();
+            addMsg('agent', 'Sorry, I had a connection issue — please try again.');
+            setStatus('Connected');
+        }
+    }
+
+    // ── TTS ────────────────────────────────────────────────────────────────────
+    function speak(text) {
+        if (!canSpeak) return;
+        window.speechSynthesis.cancel();
+        setWave(true);
+
+        const utt  = new SpeechSynthesisUtterance(text);
+        utt.lang   = 'en-GB';
+        utt.rate   = 0.93;
+        utt.pitch  = 1.0;
+        S.speaking = true;
+
+        utt.onend  = () => { S.speaking = false; setWave(false); };
+        utt.onerror= () => { S.speaking = false; setWave(false); };
+
+        window.speechSynthesis.speak(utt);
+    }
+
+    function setWave(on) {
+        document.querySelectorAll('.wbar').forEach(b => on ? b.classList.add('go') : b.classList.remove('go'));
+    }
+
+    // ── Transcript helpers ─────────────────────────────────────────────────────
+    function addMsg(role, text) {
+        const t   = document.getElementById('transcript');
+        const div = document.createElement('div');
+        div.className = `msg msg-${role === 'agent' ? 'agent' : 'user'}`;
+        div.innerHTML = `
+            <div class="msg-label">${role === 'agent' ? 'Agent' : S.name}</div>
+            <div class="msg-bubble">${text}</div>`;
+        t.appendChild(div);
+        t.scrollTop = t.scrollHeight;
+    }
+
+    function addThinking() {
+        const t   = document.getElementById('transcript');
+        const div = document.createElement('div');
+        div.id    = 'thinking-msg';
+        div.className = 'msg msg-agent';
+        div.innerHTML = `<div class="msg-label">Agent</div>
+            <div class="thinking"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>`;
+        t.appendChild(div);
+        t.scrollTop = t.scrollHeight;
+    }
+
+    function removeThinking() {
+        const el = document.getElementById('thinking-msg');
+        if (el) el.remove();
+    }
+
+    // ── End call → summary ─────────────────────────────────────────────────────
+    async function endCall() {
+        window.speechSynthesis.cancel();
+        if (recognition && S.listening) recognition.stop();
+        show('s-summary');
+
+        const transcript = S.messages
+            .map(m => `${m.role === 'user' ? S.name : 'Agent'}: ${m.content}`)
+            .join('\n\n');
+
+        try {
+            const res = await fetch('/api/summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    transcript,
+                    customerName:    S.name,
+                    enquiry:         S.enquiry,
+                    carName:         S.carName,
+                    flaggedQuestions: S.flagged
+                })
+            });
+
+            const data = await res.json();
+            document.getElementById('summary-content').textContent = data.summary;
+
+        } catch (err) {
+            document.getElementById('summary-content').textContent =
+                `Customer: ${S.name}\nEnquiry: ${S.enquiry}\n\n${transcript}`;
+        }
+    }
+
+    // ── Reset ──────────────────────────────────────────────────────────────────
+    function resetAll() {
+        S = { name:'', enquiry:'', carContext:'', carName:'', openingMessage:'',
+              messages:[], flagged:[], listening:false, speaking:false };
+        document.getElementById('inp-name').value    = '';
+        document.getElementById('inp-enquiry').value = '';
+        document.getElementById('car-badge').classList.remove('show');
+        show('s-form');
+    }
+</script>
+</body>
+</html>

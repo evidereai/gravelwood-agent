@@ -1,0 +1,16 @@
+{
+  "name": "gravelwood-ai-agent",
+  "version": "1.0.0",
+  "description": "AI Voice Sales Agent for Gravelwood Car Sales",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
