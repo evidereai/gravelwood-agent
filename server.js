@@ -1,5 +1,6 @@
 const express = require('express');
 const https = require('https');
+const http = require('http');
 const path = require('path');
 
 const app = express();
@@ -7,6 +8,34 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+// ─── Fetch a webpage ──────────────────────────────────────────────────────────
+
+function fetchPage(url) {
+    return new Promise((resolve, reject) => {
+        const lib = url.startsWith('https') ? https : http;
+        lib.get(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Gravelwood-Agent/1.0)' }
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => resolve(data));
+        }).on('error', reject);
+    });
+}
+
+// Strip HTML tags and collapse whitespace to get clean text
+function stripHtml(html) {
+    return html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 8000); // Keep it lean
+}
+
+// ─── Claude API Helper ────────────────────────────────────────────────────────
 
 function callClaude(payload) {
     return new Promise((resolve, reject) => {
@@ -27,11 +56,14 @@ function callClaude(payload) {
             res.on('end', () => {
                 try {
                     const parsed = JSON.parse(data);
-                    console.log('Claude response type:', parsed.type, '| stop_reason:', parsed.stop_reason);
-                    if (parsed.error) console.error('Claude API error:', JSON.stringify(parsed.error));
-                    resolve(parsed);
+                    if (parsed.error) {
+                        console.error('Claude API error:', parsed.error.type, parsed.error.message);
+                        reject(new Error(parsed.error.message));
+                    } else {
+                        resolve(parsed);
+                    }
                 } catch (e) {
-                    reject(new Error('Claude parse error: ' + data.substring(0, 300)));
+                    reject(new Error('Parse error: ' + data.substring(0, 200)));
                 }
             });
         });
@@ -42,131 +74,108 @@ function callClaude(payload) {
 }
 
 function extractText(content) {
-    if (!Array.isArray(content)) {
-        console.error('extractText: content is not an array:', typeof content, content);
-        return '';
-    }
-    const texts = [];
-    for (const block of content) {
-        if (block.type === 'text' && block.text) {
-            texts.push(block.text);
-        } else if (block.type === 'tool_result' && Array.isArray(block.content)) {
-            for (const inner of block.content) {
-                if (inner.type === 'text' && inner.text) texts.push(inner.text);
-            }
-        }
-    }
-    const result = texts.join('');
-    if (!result) console.warn('extractText: no text found in content blocks:', JSON.stringify(content).substring(0, 300));
-    return result;
+    if (!Array.isArray(content)) return '';
+    return content
+        .filter(b => b.type === 'text' && b.text)
+        .map(b => b.text)
+        .join('');
 }
 
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
+// POST /api/init
 app.post('/api/init', async (req, res) => {
     const { name, enquiry } = req.body;
     if (!name || !enquiry) return res.status(400).json({ error: 'Name and enquiry required' });
-    console.log(`Init call: ${name} — "${enquiry}"`);
+    console.log(`Init: ${name} — "${enquiry}"`);
 
     try {
-        const searchRes = await callClaude({
+        // Step 1: Fetch Gravelwood stock page directly — no web search tool
+        let pageText = '';
+        try {
+            const html = await fetchPage('https://www.gravelwood.co.uk/used-cars-for-sale/');
+            pageText = stripHtml(html);
+            console.log('Page fetched, length:', pageText.length);
+        } catch (e) {
+            console.error('Page fetch failed:', e.message);
+            pageText = 'Could not fetch live inventory. Use general knowledge about Gravelwood Car Sales.';
+        }
+
+        // Step 2: Ask Claude to find the matching car from the page text
+        const findRes = await callClaude({
             model: 'claude-sonnet-4-6',
-            max_tokens: 3000,
-            tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-            system: `You are a research assistant for a car dealership. 
-Search gravelwood.co.uk and find the specific vehicle a customer is enquiring about.
-Extract ALL available details: full name, year, price, mileage, colour, engine, BHP, transmission, 0-62, MPG, features, extras with prices, stock ref, URL.
-Return a detailed plain-text summary of everything you find.
-If the enquiry is vague, find the closest match on the site.
-If no match found, summarise what is available on gravelwood.co.uk.`,
+            max_tokens: 500,
+            system: 'You are a car dealership assistant. Extract details about a specific car from webpage text. Return a concise plain-text summary of the matching car including: name, price, mileage, colour, engine, key features. If you cannot find a match, say what cars are available.',
             messages: [{
                 role: 'user',
-                content: `Customer enquiry: "${enquiry}"\n\nSearch gravelwood.co.uk for this vehicle and return a comprehensive summary of all its details.`
+                content: `Customer is asking about: "${enquiry}"\n\nWebpage text:\n${pageText}\n\nFind the matching car and summarise its details.`
             }]
         });
 
-        const carContext = extractText(searchRes.content);
-        console.log('Car context length:', carContext.length);
+        const carContext = extractText(findRes.content);
+        console.log('Car context:', carContext.substring(0, 100));
 
-        const nameRes = await callClaude({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 30,
-            system: 'Return ONLY the year, make and model of the car. E.g. "2024 Land Rover Range Rover". No other text.',
-            messages: [{ role: 'user', content: carContext || 'Unknown vehicle' }]
-        });
-        const carName = extractText(nameRes.content).trim();
-        console.log('Car name:', carName);
-
+        // Step 3: Generate opening greeting
         const greetRes = await callClaude({
             model: 'claude-sonnet-4-6',
-            max_tokens: 200,
+            max_tokens: 150,
             system: buildSystemPrompt(carContext),
             messages: [{
                 role: 'user',
-                content: `Generate a warm, professional opening greeting for a call with ${name}. Their enquiry was: "${enquiry}". Keep it to 2-3 sentences. Acknowledge the specific car and invite questions.`
+                content: `Say hello to ${name} and acknowledge their interest in: "${enquiry}". 2 sentences max.`
             }]
         });
 
         const openingMessage = extractText(greetRes.content);
-        console.log('Opening message length:', openingMessage.length);
+        console.log('Opening:', openingMessage.substring(0, 80));
 
-        res.json({ carContext, carName, openingMessage });
+        res.json({ carContext, carName: enquiry, openingMessage });
 
     } catch (err) {
         console.error('Init error:', err.message);
-        res.status(500).json({ error: 'Failed to initialise call: ' + err.message });
+        res.status(500).json({ error: err.message });
     }
 });
 
+
+// POST /api/chat
 app.post('/api/chat', async (req, res) => {
     const { messages, carContext, customerName } = req.body;
-    if (!messages || !carContext) return res.status(400).json({ error: 'Missing required fields' });
+    if (!messages || !carContext) return res.status(400).json({ error: 'Missing fields' });
 
     try {
         const chatRes = await callClaude({
             model: 'claude-sonnet-4-6',
-            max_tokens: 400,
+            max_tokens: 300,
             system: buildSystemPrompt(carContext, customerName),
             messages
         });
 
         const reply = extractText(chatRes.content);
-        console.log('Chat reply length:', reply.length);
+        console.log('Reply:', reply.substring(0, 80));
 
-        const flagged = /don't have that detail|make a note|follow.?up|not sure about that|sales team will|contact.*team/i.test(reply);
-
+        const flagged = /don't have that detail|make a note|follow.?up|sales team/i.test(reply);
         res.json({ reply, flagged });
 
     } catch (err) {
         console.error('Chat error:', err.message);
-        res.status(500).json({ error: 'Failed to get response' });
+        res.status(500).json({ error: err.message });
     }
 });
 
+
+// POST /api/summary
 app.post('/api/summary', async (req, res) => {
     const { transcript, customerName, enquiry, flaggedQuestions, carName } = req.body;
 
     try {
         const sumRes = await callClaude({
             model: 'claude-sonnet-4-6',
-            max_tokens: 700,
-            system: 'You write concise, professional post-call lead summaries for a prestige car dealership sales team. Be direct and actionable.',
+            max_tokens: 500,
+            system: 'Write concise post-call lead summaries for a car dealership sales team.',
             messages: [{
                 role: 'user',
-                content: `Write a sales team summary for this AI agent call:
-
-Customer: ${customerName}
-Vehicle enquired about: ${carName || 'Unknown'}
-Original enquiry: "${enquiry}"
-Questions the agent could not fully answer: ${flaggedQuestions.length > 0 ? flaggedQuestions.join('; ') : 'None'}
-
-Call transcript:
-${transcript}
-
-Structure your summary as:
-LEAD TEMPERATURE: [Hot / Warm / Cold] — one sentence reason
-KEY INTERESTS: bullet points
-CONCERNS / OBJECTIONS: bullet points (or "None raised")
-QUESTIONS NEEDING FOLLOW-UP: bullet points (or "None")
-RECOMMENDED NEXT ACTION: one clear sentence`
+                content: `Customer: ${customerName}\nCar: ${carName}\nEnquiry: "${enquiry}"\nUnanswered questions: ${flaggedQuestions.join('; ') || 'None'}\n\nTranscript:\n${transcript}\n\nSummarise: lead temperature (Hot/Warm/Cold), key interests, next action.`
             }]
         });
 
@@ -174,36 +183,32 @@ RECOMMENDED NEXT ACTION: one clear sentence`
 
     } catch (err) {
         console.error('Summary error:', err.message);
-        res.status(500).json({ error: 'Failed to generate summary' });
+        res.status(500).json({ error: err.message });
     }
 });
 
+
+// ─── System Prompt ────────────────────────────────────────────────────────────
+
 function buildSystemPrompt(carContext, customerName) {
-    return `You are a professional AI sales agent for Gravelwood Car Sales — a prestige used car dealership near Brands Hatch in Kent, UK.
+    return `You are a professional AI sales agent for Gravelwood Car Sales — a prestige used car dealer near Brands Hatch in Kent, UK. Phone: 01474 874 873. By appointment only.
 
-DEALERSHIP:
-- Address: Unit 4a, West Yoke Farm, Michaels Lane, Sevenoaks, Kent, TN15 7EP
-- Phone: 01474 874 873
-- Hours: By appointment only, Monday to Saturday
-- Nationwide delivery available
-- Cars can be reserved for £500
-
-VEHICLE YOU ARE BRIEFED ON:
+VEHICLE DETAILS:
 ${carContext}
 
-YOUR RULES:
-1. Be warm, knowledgeable, and professional — like a senior prestige car consultant
-2. Use ONLY the vehicle details above — never invent or guess specifications, prices or features
-3. Finance questions: give rough indicative monthly figures only, always recommend a formal quote from the sales team
-4. Unknown details: say "That's a great question — I don't have that detail to hand right now, but I'll make sure our sales team follows up with you on that"
-5. This is a voice call — keep responses to 2-4 sentences. Be concise.
-6. If the customer shows interest, offer to arrange a viewing or test drive at the dealership
-7. Other cars: say you only have full details on this specific vehicle but the team can help with anything else in stock
-8. Never fabricate information — trust is everything in prestige car sales`;
+RULES:
+- Be warm and professional — like a senior prestige car consultant
+- Only use the vehicle details above — never invent specs or prices
+- Keep responses to 2-3 sentences — this is a voice call
+- If you don't know something say: "I'll make sure the sales team follows up on that"
+- If customer is interested, offer to arrange a viewing or test drive`;
 }
+
+
+// ─── Start ────────────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✓ Gravelwood AI Agent running on port ${PORT}`);
-    if (!ANTHROPIC_API_KEY) console.warn('⚠ WARNING: ANTHROPIC_API_KEY is not set');
+    if (!ANTHROPIC_API_KEY) console.warn('⚠ ANTHROPIC_API_KEY not set');
 });
